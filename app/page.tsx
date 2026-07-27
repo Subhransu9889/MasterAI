@@ -1,3 +1,4 @@
+import Link from "next/link";
 import styles from "./page.module.css";
 
 type Capability = {
@@ -203,9 +204,9 @@ export default function Home() {
             <a href="#capabilities">Capabilities</a>
             <a href="#initialize">Early access</a>
           </nav>
-          <a className={styles.navCta} href="#initialize">
+          <Link className={styles.navCta} href="/auth?mode=signup">
             Start a profile <span aria-hidden="true">↗</span>
-          </a>
+          </Link>
         </header>
 
         <div className={styles.heroGrid}>
@@ -223,9 +224,9 @@ export default function Home() {
               then turns that context into guidance you can actually use.
             </p>
             <div className={styles.heroActions}>
-              <a className={styles.primaryButton} href="#initialize">
+              <Link className={styles.primaryButton} href="/auth?mode=signup">
                 Configure your context <span aria-hidden="true">↗</span>
-              </a>
+              </Link>
               <a className={styles.secondaryLink} href="#experience">
                 See the engine <span aria-hidden="true">↓</span>
               </a>
@@ -401,7 +402,8 @@ export default function Home() {
               Leave your email and be first to shape a more personal kind of
               AI assistant.
             </p>
-            <form className={styles.ctaForm} action="#initialize" method="get">
+            <form className={styles.ctaForm} action="/auth" method="get">
+              <input type="hidden" name="mode" value="signup" />
               <label className={styles.srOnly} htmlFor="email">
                 Email address
               </label>
