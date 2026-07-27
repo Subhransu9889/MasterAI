@@ -12,6 +12,31 @@ By the end of Day 5, your project should allow a user to:
 * Receive personalized responses based on their profile
 * View AI-generated recommendations on a dashboard
 
+## 🎨 Product Design System
+
+The landing page and future product surfaces should continue this visual system so MasterAI feels distinct, recognizable, and consistent as the MVP grows.
+
+### Color tokens
+
+| Token | Hex | Use |
+| --- | --- | --- |
+| Deep Ink | `#0A0B0E` | Primary background, navigation, dark product surfaces |
+| Ink Soft | `#15171D` | Offset shadows and elevated dark surfaces |
+| Warm Paper | `#F3F0EA` | Reading surfaces, product previews, CTA panel |
+| Citrus Lime | `#DDF85D` | Primary action, active state, signal, highlight |
+| Graphite | `#4A4C52` | Rules, dividers, and muted dark-background text |
+| Paper Rule | `#D1CEC7` | Dividers and borders on warm paper surfaces |
+| Lime Dark | `#829800` | Accessible lime-on-paper status and progress marks |
+
+### Typography and layout
+
+* **Display:** Newsreader, with italic emphasis for personal or aspirational language.
+* **Body/UI:** Geist Sans for clear reading and interface copy.
+* **Metadata:** Geist Mono for labels, system states, timestamps, and data.
+* **Layout language:** editorial asymmetry, thin rules, sharp corners (maximum `2px` radius), warm paper panels, and generous whitespace.
+* **Motion language:** sticky storytelling, restrained scroll-linked reveals, progress feedback, and reduced-motion fallbacks.
+* **Accessibility baseline:** keep body copy and primary actions at accessible contrast, maintain visible focus states, and respect `prefers-reduced-motion`.
+
 ---
 
 # 📅 Day 1 – Planning & Project Setup
