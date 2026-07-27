@@ -34,26 +34,26 @@ Set up the project and create the foundation.
 * Create Next.js project
 * Install Tailwind CSS
 * Install shadcn/ui
-* Configure Clerk Authentication
-* Set up Supabase database
-* Configure Gemini API
+* Configure Clerk Authentication / BetterAuth (selected✅)
+* Set up Supabase/neon database
+* Configure Gemini API or some free model 
 
 #### Design
 
 Create simple wireframes for:
 
-* Landing Page
-* Login
-* Onboarding
-* Dashboard
-* Chat
-* Profile
+* Landing Page -> pending......
+* Login -> pending......
+* Onboarding -> pending......
+* Dashboard -> pending......
+* Chat -> pending......
+* Profile -> pending......
 
 #### Database Tables
 
 * Users
-* Preferences
-* Conversations
+* Preferences -> like interest, goal and you can add as per your own.
+* Conversations -> must for the next prediction as it helps to imporove and reply more proffetional
 
 ### Deliverables
 
@@ -84,8 +84,8 @@ Allow users to create an account and store preferences.
 Collect:
 
 * Name
-* Profession
-* Interests
+* Profession -> ...
+* Interests -> ...
 * Goals
 * Preferred Language
 
