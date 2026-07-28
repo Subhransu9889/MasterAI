@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
@@ -92,6 +92,23 @@ export default function DashboardPage() {
   const [recs] = useState<Recommendation[]>(defaultRecommendations);
   const [chats] = useState<RecentConversation[]>(defaultConversations);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+
+  // Pure frontend Chat session states
+  const [isChatActive, setIsChatActive] = useState(false);
+  const [messages, setMessages] = useState<Array<{ id: string; role: "user" | "assistant"; content: string }>>([]);
+  const [inputValue, setInputValue] = useState("");
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  const handleSendMessage = (text: string) => {
+    if (!text.trim()) return;
+    setMessages((prev) => [...prev, { id: `msg-${Date.now()}`, role: "user", content: text }]);
+    setInputValue("");
+  };
+
   const session = authClient.useSession();
   const user = session.data?.user;
   const displayName = user?.name || "there";
@@ -509,28 +526,170 @@ export default function DashboardPage() {
         )}
 
         {activeTab === "chat" && (
-          <div className={styles.mockScreenContainer}>
-            <h2 className={styles.mockHeading}>The assistant is ready to converse.</h2>
-            <p className={styles.mockHeadingSub}>layer 02 / hyper-personalized assistant</p>
-            <p className={styles.mockDescText}>
-              Your target profile context (Senior Product Designer, Design Systems, Systems Thinking) is already active. Ask a specific roadmapping or skill questions to start generating calibrated guidelines.
-            </p>
-            <div className={styles.mockActions}>
-              <button
-                onClick={() => alert("Mock Action: Starting a new chat session.")}
-                className={styles.buttonPrimary}
-                style={{ width: "auto", display: "inline-flex" }}
-              >
-                Start New Session
-              </button>
-              <button
-                onClick={() => setActiveTab("dashboard")}
-                className={styles.buttonSecondary}
-              >
-                Back to Dashboard
-              </button>
+          !isChatActive ? (
+            <div className={styles.mockScreenContainer}>
+              <h2 className={styles.mockHeading}>The assistant is ready to converse.</h2>
+              <p className={styles.mockHeadingSub}>layer 02 / hyper-personalized assistant</p>
+              <p className={styles.mockDescText}>
+                Your target profile context (Senior Product Designer, Design Systems, Systems Thinking) is already active. Ask a specific roadmapping or skill questions to start generating calibrated guidelines.
+              </p>
+              <div className={styles.mockActions}>
+                <button
+                  onClick={() => setIsChatActive(true)}
+                  className={styles.buttonPrimary}
+                  style={{ width: "auto", display: "inline-flex" }}
+                >
+                  Start New Session
+                </button>
+                <button
+                  onClick={() => setActiveTab("dashboard")}
+                  className={styles.buttonSecondary}
+                >
+                  Back to Dashboard
+                </button>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className={styles.chatWorkspaceFullscreen}>
+              {/* Minimalist Top Bar for Chat tab */}
+              <div className={styles.chatTopBar}>
+                <div className={styles.chatInfo}>
+                  <span className={styles.chatInfoBadge}>assistant / active</span>
+                  <span className={styles.chatTitleLabel}>new session</span>
+                </div>
+                <button 
+                  onClick={() => {
+                    setIsChatActive(false);
+                    setMessages([]);
+                  }} 
+                  className={styles.chatNewButton}
+                >
+                  <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                  Exit Session
+                </button>
+              </div>
+
+              {/* Chat message feed */}
+              <div className={styles.chatMessagesArea}>
+                {messages.length === 0 ? (
+                  <div className={styles.chatEmptyState}>
+                    <div className={styles.chatEmptyStateHeader}>
+                      <p className={styles.chatEmptyKicker}>masterai / logic engine</p>
+                      <h2 className={styles.chatEmptyTitle}>Where shall we take your <em>trajectory</em> today?</h2>
+                      <p className={styles.chatEmptyDesc}>
+                        Select a starter path below or type a custom query. Your profile context is automatically active.
+                      </p>
+                    </div>
+                    
+                    <div className={styles.promptStartersGrid}>
+                      <button
+                        onClick={() => handleSendMessage("Create a 30-day AI learning roadmap.")}
+                        className={styles.promptCard}
+                      >
+                        <div className={styles.promptCardHeader}>
+                          <span className={styles.promptCardLabel}>roadmap</span>
+                          <span className={styles.promptCardArrow}>↗</span>
+                        </div>
+                        <h4 className={styles.promptCardTitle}>Create a 30-day AI learning roadmap</h4>
+                        <p className={styles.promptCardSub}>Get a prioritized list of tasks, projects, and key resources.</p>
+                      </button>
+
+                      <button
+                        onClick={() => handleSendMessage("Suggest projects based on my interests.")}
+                        className={styles.promptCard}
+                      >
+                        <div className={styles.promptCardHeader}>
+                          <span className={styles.promptCardLabel}>project</span>
+                          <span className={styles.promptCardArrow}>↗</span>
+                        </div>
+                        <h4 className={styles.promptCardTitle}>Suggest projects based on my interests</h4>
+                        <p className={styles.promptCardSub}>Get customized hands-on project ideas with suggested tech stacks.</p>
+                      </button>
+
+                      <button
+                        onClick={() => handleSendMessage("Design system structure and naming conventions.")}
+                        className={styles.promptCard}
+                      >
+                        <div className={styles.promptCardHeader}>
+                          <span className={styles.promptCardLabel}>architecture</span>
+                          <span className={styles.promptCardArrow}>↗</span>
+                        </div>
+                        <h4 className={styles.promptCardTitle}>Design system structure and naming conventions</h4>
+                        <p className={styles.promptCardSub}>Understand primitive vs semantic tokens and layout design principles.</p>
+                      </button>
+
+                      <button
+                        onClick={() => handleSendMessage("Prepare for frontend developer technical interview.")}
+                        className={styles.promptCard}
+                      >
+                        <div className={styles.promptCardHeader}>
+                          <span className={styles.promptCardLabel}>career</span>
+                          <span className={styles.promptCardArrow}>↗</span>
+                        </div>
+                        <h4 className={styles.promptCardTitle}>Prepare for frontend developer technical interview</h4>
+                        <p className={styles.promptCardSub}>Get ready with core JavaScript, TypeScript, React, and system design topics.</p>
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className={styles.messageList}>
+                    {messages.map((msg) => (
+                      <div
+                        key={msg.id}
+                        className={`${styles.messageRow} ${
+                          msg.role === "user" ? styles.messageRowUser : styles.messageRowAssistant
+                        }`}
+                      >
+                        <div className={styles.messageAvatar}>
+                          {msg.role === "user" ? initials : "AI"}
+                        </div>
+                        <div className={styles.messageBubble}>
+                          <p className={styles.userText}>{msg.content}</p>
+                        </div>
+                      </div>
+                    ))}
+                    <div ref={messagesEndRef} />
+                  </div>
+                )}
+              </div>
+
+              {/* Input Dock */}
+              <div className={styles.chatInputDock}>
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    handleSendMessage(inputValue);
+                  }}
+                  className={styles.chatInputWrapper}
+                >
+                  <input
+                    type="text"
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                    placeholder="Ask MasterAI a question..."
+                    className={styles.chatInput}
+                  />
+                  <button
+                    type="submit"
+                    disabled={!inputValue.trim()}
+                    className={styles.chatSendButton}
+                    aria-label="Send message"
+                  >
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <line x1="22" y1="2" x2="11" y2="13" />
+                      <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                    </svg>
+                  </button>
+                </form>
+                <p className={styles.chatFootnote}>
+                  MasterAI 1.0 calibrated to {firstName.toLowerCase()}'s trajectory. Pure frontend client session.
+                </p>
+              </div>
+            </div>
+          )
         )}
 
         {activeTab === "profile" && (
