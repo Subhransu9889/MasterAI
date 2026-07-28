@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { authClient } from "@/lib/auth-client";
 import styles from "./dashboard.module.css";
 
 type Recommendation = {
@@ -90,8 +91,29 @@ export default function DashboardPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [recs] = useState<Recommendation[]>(defaultRecommendations);
   const [chats] = useState<RecentConversation[]>(defaultConversations);
+  const session = authClient.useSession();
+  const user = session.data?.user;
+  const displayName = user?.name || "there";
+  const firstName = displayName.split(" ")[0] || displayName;
+  const initials = useMemo(
+    () =>
+      displayName
+        .split(" ")
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((part) => part[0]?.toUpperCase())
+        .join("") || "MA",
+    [displayName],
+  );
 
-  const handleSignOut = () => {
+  useEffect(() => {
+    if (!session.isPending && !user) {
+      router.replace("/auth?mode=signin");
+    }
+  }, [router, session.isPending, user]);
+
+  const handleSignOut = async () => {
+    await authClient.signOut();
     router.push("/");
   };
 
@@ -252,7 +274,7 @@ export default function DashboardPage() {
             </span>
           </Link>
           <div className={styles.avatarMobile} onClick={handleSignOut} title="Click to Sign Out">
-            AM
+            {initials}
           </div>
         </header>
         
@@ -263,7 +285,7 @@ export default function DashboardPage() {
               <span className={styles.pulseDot} />
               trajectory status / active calibrating
             </p>
-            <h1 className={styles.welcomeTitle}>Welcome Back, Alex 👋</h1>
+            <h1 className={styles.welcomeTitle}>Welcome back, {firstName}</h1>
           </div>
 
           <div className={styles.topActionsArea}>
@@ -283,8 +305,8 @@ export default function DashboardPage() {
             </div>
             
             <div className={styles.userDropdown} onClick={handleSignOut} title="Click to Sign Out">
-              <div className={styles.avatar}>AM</div>
-              <span className={styles.userName}>alex</span>
+              <div className={styles.avatar}>{initials}</div>
+              <span className={styles.userName}>{firstName.toLowerCase()}</span>
               <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5" className={styles.dropdownChevron}>
                 <polyline points="6 9 12 15 18 9" />
               </svg>
@@ -362,7 +384,7 @@ export default function DashboardPage() {
 
         {activeTab === "chat" && (
           <div className={styles.mockScreenContainer}>
-            <h2 className={styles.mockHeading}>"The assistant is ready to converse."</h2>
+            <h2 className={styles.mockHeading}>The assistant is ready to converse.</h2>
             <p className={styles.mockHeadingSub}>layer 02 / hyper-personalized assistant</p>
             <p className={styles.mockDescText}>
               Your target profile context (Senior Product Designer, Design Systems, Systems Thinking) is already active. Ask a specific roadmapping or skill questions to start generating calibrated guidelines.
@@ -396,7 +418,7 @@ export default function DashboardPage() {
             <div className={styles.profileEditGrid}>
               <div className={styles.profileEditRow}>
                 <span className={styles.profileFieldLabel}>Name</span>
-                <span className={styles.profileFieldValue}>Alex Morgan</span>
+                <span className={styles.profileFieldValue}>{displayName}</span>
               </div>
               <div className={styles.profileEditRow}>
                 <span className={styles.profileFieldLabel}>Current Role</span>

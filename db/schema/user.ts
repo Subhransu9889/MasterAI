@@ -14,8 +14,9 @@ export const users = pgTable(
   'users',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    authProviderId: text('auth_provider_id').notNull(),
+    authProviderId: text('auth_provider_id'),
     email: text('email').notNull(),
+    emailVerified: boolean('email_verified').notNull().default(false),
     name: text('name').notNull(),
     imageUrl: text('image_url'),
     role: userRole('role').notNull().default('user'),
