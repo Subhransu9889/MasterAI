@@ -91,6 +91,7 @@ export default function DashboardPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [recs] = useState<Recommendation[]>(defaultRecommendations);
   const [chats] = useState<RecentConversation[]>(defaultConversations);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
   const session = authClient.useSession();
   const user = session.data?.user;
   const displayName = user?.name || "there";
@@ -111,6 +112,13 @@ export default function DashboardPage() {
       router.replace("/auth?mode=signin");
     }
   }, [router, session.isPending, user]);
+
+  useEffect(() => {
+    if (!dropdownOpen) return;
+    const handleClose = () => setDropdownOpen(false);
+    document.addEventListener("click", handleClose);
+    return () => document.removeEventListener("click", handleClose);
+  }, [dropdownOpen]);
 
   const handleSignOut = async () => {
     await authClient.signOut();
@@ -273,8 +281,67 @@ export default function DashboardPage() {
               master<span className={styles.brandAccent}>ai</span>
             </span>
           </Link>
-          <div className={styles.avatarMobile} onClick={handleSignOut} title="Click to Sign Out">
-            {initials}
+          <div className={styles.userDropdownContainer}>
+            <div
+              className={styles.avatarMobile}
+              onClick={(e) => {
+                e.stopPropagation();
+                setDropdownOpen(!dropdownOpen);
+              }}
+              title="User Profile Menu"
+            >
+              {initials}
+            </div>
+
+            {dropdownOpen && (
+              <div className={styles.dropdownMenu} onClick={(e) => e.stopPropagation()}>
+                <div className={styles.dropdownEmailRow}>
+                  <span
+                    className={styles.dropdownEmail}
+                    title={user?.email || "user@masterai.com"}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActiveTab("profile");
+                      setDropdownOpen(false);
+                    }}
+                  >
+                    {user?.email || "user@masterai.com"}
+                  </span>
+                  <button
+                    type="button"
+                    className={styles.profileArrowButton}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActiveTab("profile");
+                      setDropdownOpen(false);
+                    }}
+                    title="Go to Profile Settings"
+                  >
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <line x1="5" y1="12" x2="19" y2="12" />
+                      <polyline points="12 5 19 12 12 19" />
+                    </svg>
+                  </button>
+                </div>
+                <div className={styles.dropdownDivider} />
+                <button
+                  type="button"
+                  className={styles.logoutButton}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDropdownOpen(false);
+                    handleSignOut();
+                  }}
+                >
+                  <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                    <polyline points="16 17 21 12 16 7" />
+                    <line x1="21" y1="12" x2="9" y2="12" />
+                  </svg>
+                  Log Out
+                </button>
+              </div>
+            )}
           </div>
         </header>
         
@@ -304,12 +371,71 @@ export default function DashboardPage() {
               </button>
             </div>
             
-            <div className={styles.userDropdown} onClick={handleSignOut} title="Click to Sign Out">
-              <div className={styles.avatar}>{initials}</div>
-              <span className={styles.userName}>{firstName.toLowerCase()}</span>
-              <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5" className={styles.dropdownChevron}>
-                <polyline points="6 9 12 15 18 9" />
-              </svg>
+            <div className={styles.userDropdownContainer}>
+              <div
+                className={styles.userDropdown}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setDropdownOpen(!dropdownOpen);
+                }}
+                title="User Profile Menu"
+              >
+                <div className={styles.avatar}>{initials}</div>
+                <span className={styles.userName}>{firstName.toLowerCase()}</span>
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5" className={styles.dropdownChevron}>
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </div>
+
+              {dropdownOpen && (
+                <div className={styles.dropdownMenu} onClick={(e) => e.stopPropagation()}>
+                  <div className={styles.dropdownEmailRow}>
+                    <span
+                      className={styles.dropdownEmail}
+                      title={user?.email || "user@masterai.com"}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActiveTab("profile");
+                        setDropdownOpen(false);
+                      }}
+                    >
+                      {user?.email || "user@masterai.com"}
+                    </span>
+                    <button
+                      type="button"
+                      className={styles.profileArrowButton}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActiveTab("profile");
+                        setDropdownOpen(false);
+                      }}
+                      title="Go to Profile Settings"
+                    >
+                      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <line x1="5" y1="12" x2="19" y2="12" />
+                        <polyline points="12 5 19 12 12 19" />
+                      </svg>
+                    </button>
+                  </div>
+                  <div className={styles.dropdownDivider} />
+                  <button
+                    type="button"
+                    className={styles.logoutButton}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDropdownOpen(false);
+                      handleSignOut();
+                    }}
+                  >
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                      <polyline points="16 17 21 12 16 7" />
+                      <line x1="21" y1="12" x2="9" y2="12" />
+                    </svg>
+                    Log Out
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </header>
