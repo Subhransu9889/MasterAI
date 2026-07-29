@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useRef } from "react";
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
@@ -26,6 +27,93 @@ type ChatMessage = {
   role: "user" | "assistant";
   content: string;
 };
+
+type PersonalizationProfile = {
+  profession: string;
+  interests: string[];
+  goals: string[];
+  preferredLanguage: string;
+  learningLevel: string;
+  tone: string;
+  answerStyle: string;
+  background: string;
+  constraints: string;
+};
+
+type ProfileForm = Omit<PersonalizationProfile, "interests" | "goals"> & {
+  interests: string;
+  goals: string;
+};
+
+const defaultProfile: PersonalizationProfile = {
+  profession: "Product Designer",
+  interests: ["AI", "Design Systems", "Technical Writing"],
+  goals: ["Become a Senior Product Designer", "Lead systems thinking"],
+  preferredLanguage: "English",
+  learningLevel: "Normal context",
+  tone: "Direct, mentoring, academic",
+  answerStyle: "Give clear steps, examples, tradeoffs, and next actions.",
+  background: "I am building MasterAI as a personalized intelligence and learning assistant.",
+  constraints: "Keep answers practical, specific, and adapted to my current goals.",
+};
+
+const roleOptions = [
+  "Product Designer",
+  "Frontend Developer",
+  "Full Stack Developer",
+  "Backend Developer",
+  "AI Engineer",
+  "Data Analyst",
+  "Product Manager",
+  "Student",
+  "Founder",
+  "Marketing Specialist",
+];
+
+const learningLevelOptions = [
+  "Low context",
+  "Normal context",
+  "Mid context",
+  "Advanced context",
+  "More context advanced",
+];
+
+const toneOptions = [
+  "Direct, mentoring, academic",
+  "Friendly and practical",
+  "Concise and action-focused",
+  "Detailed and explanatory",
+  "Senior coach style",
+];
+
+const answerStyleOptions = [
+  "Give clear steps, examples, tradeoffs, and next actions.",
+  "Short answer first, then details.",
+  "Step-by-step with examples.",
+  "Deep explanation with context.",
+  "Checklist and action plan.",
+];
+
+function normalizeLearningLevel(value: string) {
+  const normalized = value.trim().toLowerCase();
+
+  if (normalized === "beginner") return "Low context";
+  if (normalized === "intermediate") return "Normal context";
+  if (normalized === "advanced") return "Advanced context";
+
+  return learningLevelOptions.includes(value) ? value : "Normal context";
+}
+
+function normalizePreferredLanguage(value: string) {
+  const normalized = value.trim().toLowerCase();
+
+  if (normalized.startsWith("hindi")) return "Hindi";
+  return "English";
+}
+
+function withSavedOption(options: string[], value: string) {
+  return value && !options.includes(value) ? [value, ...options] : options;
+}
 
 const defaultRecommendations: Recommendation[] = [
   {
@@ -98,6 +186,157 @@ const loadingSteps = [
   "Writing the response...",
 ];
 
+function profileToForm(profile: PersonalizationProfile): ProfileForm {
+  return {
+    ...profile,
+    preferredLanguage: normalizePreferredLanguage(profile.preferredLanguage),
+    learningLevel: normalizeLearningLevel(profile.learningLevel),
+    interests: profile.interests.join(", "),
+    goals: profile.goals.join(", "),
+  };
+}
+
+function splitList(value: string) {
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function renderInlineText(text: string) {
+  return text.split(/(`[^`]+`|\*\*[^*]+\*\*)/g).map((part, index) => {
+    if (part.startsWith("`") && part.endsWith("`")) {
+      return (
+        <code key={`${part}-${index}`} className={styles.assistantInlineCode}>
+          {part.slice(1, -1)}
+        </code>
+      );
+    }
+
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return <strong key={`${part}-${index}`}>{part.slice(2, -2)}</strong>;
+    }
+
+    return <span key={`${part}-${index}`}>{part}</span>;
+  });
+}
+
+function renderFormattedMessage(content: string) {
+  const lines = content.replace(/\r\n/g, "\n").split("\n");
+  const blocks: ReactNode[] = [];
+  let paragraph: string[] = [];
+  let index = 0;
+
+  const flushParagraph = () => {
+    const text = paragraph.join(" ").trim();
+
+    if (text) {
+      blocks.push(
+        <p key={`paragraph-${blocks.length}`} className={styles.assistantParagraph}>
+          {renderInlineText(text)}
+        </p>,
+      );
+    }
+
+    paragraph = [];
+  };
+
+  while (index < lines.length) {
+    const line = lines[index];
+    const trimmed = line.trim();
+
+    if (!trimmed) {
+      flushParagraph();
+      index += 1;
+      continue;
+    }
+
+    if (trimmed.startsWith("```")) {
+      flushParagraph();
+      const codeLines: string[] = [];
+      index += 1;
+
+      while (index < lines.length && !lines[index].trim().startsWith("```")) {
+        codeLines.push(lines[index]);
+        index += 1;
+      }
+
+      blocks.push(
+        <pre key={`code-${blocks.length}`} className={styles.assistantCodeBlock}>
+          <code>{codeLines.join("\n")}</code>
+        </pre>,
+      );
+      index += 1;
+      continue;
+    }
+
+    const heading = /^(#{1,3})\s+(.+)$/.exec(trimmed);
+    if (heading) {
+      flushParagraph();
+      blocks.push(
+        <h3 key={`heading-${blocks.length}`} className={styles.assistantHeading}>
+          {renderInlineText(heading[2])}
+        </h3>,
+      );
+      index += 1;
+      continue;
+    }
+
+    if (/^[-*]\s+/.test(trimmed) || /^\d+[.)]\s+/.test(trimmed)) {
+      flushParagraph();
+      const ordered = /^\d+[.)]\s+/.test(trimmed);
+      const items: string[] = [];
+
+      while (index < lines.length) {
+        const item = lines[index].trim();
+        const matchesListType = ordered
+          ? /^\d+[.)]\s+/.test(item)
+          : /^[-*]\s+/.test(item);
+
+        if (!matchesListType) break;
+
+        items.push(item.replace(ordered ? /^\d+[.)]\s+/ : /^[-*]\s+/, ""));
+        index += 1;
+      }
+
+      const ListTag = ordered ? "ol" : "ul";
+      blocks.push(
+        <ListTag key={`list-${blocks.length}`} className={styles.assistantList}>
+          {items.map((item, itemIndex) => (
+            <li key={`${item}-${itemIndex}`}>{renderInlineText(item)}</li>
+          ))}
+        </ListTag>,
+      );
+      continue;
+    }
+
+    if (trimmed.startsWith(">")) {
+      flushParagraph();
+      blocks.push(
+        <blockquote key={`quote-${blocks.length}`} className={styles.assistantQuote}>
+          {renderInlineText(trimmed.replace(/^>\s?/, ""))}
+        </blockquote>,
+      );
+      index += 1;
+      continue;
+    }
+
+    if (/^---+$/.test(trimmed)) {
+      flushParagraph();
+      blocks.push(<hr key={`rule-${blocks.length}`} className={styles.assistantDivider} />);
+      index += 1;
+      continue;
+    }
+
+    paragraph.push(trimmed);
+    index += 1;
+  }
+
+  flushParagraph();
+
+  return <div className={styles.assistantText}>{blocks}</div>;
+}
+
 export default function DashboardPage() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -115,6 +354,11 @@ export default function DashboardPage() {
   const [chatError, setChatError] = useState<string | null>(null);
   const [activeProvider, setActiveProvider] = useState<string>("openrouter/free");
   const [loadingStepIndex, setLoadingStepIndex] = useState(0);
+  const [profileForm, setProfileForm] = useState<ProfileForm>(() => profileToForm(defaultProfile));
+  const [isProfileLoading, setIsProfileLoading] = useState(false);
+  const [isProfileSaving, setIsProfileSaving] = useState(false);
+  const [profileStatus, setProfileStatus] = useState<string | null>(null);
+  const [profileError, setProfileError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -210,12 +454,62 @@ export default function DashboardPage() {
         .join("") || "MA",
     [displayName],
   );
+  const visibleRoleOptions = withSavedOption(roleOptions, profileForm.profession);
+  const visibleToneOptions = withSavedOption(toneOptions, profileForm.tone);
+  const visibleAnswerStyleOptions = withSavedOption(
+    answerStyleOptions,
+    profileForm.answerStyle,
+  );
 
   useEffect(() => {
     if (!session.isPending && !user) {
       router.replace("/auth?mode=signin");
     }
   }, [router, session.isPending, user]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    let cancelled = false;
+
+    async function loadProfile() {
+      setIsProfileLoading(true);
+      setProfileError(null);
+
+      try {
+        const response = await fetch("/api/profile");
+        const data = (await response.json()) as PersonalizationProfile & {
+          error?: string;
+        };
+
+        if (!response.ok) {
+          throw new Error(data.error || "Could not load profile settings.");
+        }
+
+        if (!cancelled) {
+          setProfileForm(profileToForm(data));
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setProfileError(
+            error instanceof Error
+              ? error.message
+              : "Could not load profile settings.",
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setIsProfileLoading(false);
+        }
+      }
+    }
+
+    loadProfile();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
 
   useEffect(() => {
     if (!dropdownOpen) return;
@@ -231,6 +525,53 @@ export default function DashboardPage() {
 
   const handleRecAction = (title: string) => {
     alert(`Mock Action: Starting activity for "${title}"`);
+  };
+
+  const updateProfileField = (field: keyof ProfileForm, value: string) => {
+    setProfileForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
+    setProfileStatus(null);
+    setProfileError(null);
+  };
+
+  const handleProfileSave = async () => {
+    setIsProfileSaving(true);
+    setProfileStatus(null);
+    setProfileError(null);
+
+    try {
+      const response = await fetch("/api/profile", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          ...profileForm,
+          interests: splitList(profileForm.interests),
+          goals: splitList(profileForm.goals),
+        }),
+      });
+      const data = (await response.json()) as PersonalizationProfile & {
+        error?: string;
+      };
+
+      if (!response.ok) {
+        throw new Error(data.error || "Could not save profile settings.");
+      }
+
+      setProfileForm(profileToForm(data));
+      setProfileStatus("Saved. New chats will use this personalization context.");
+    } catch (error) {
+      setProfileError(
+        error instanceof Error
+          ? error.message
+          : "Could not save profile settings.",
+      );
+    } finally {
+      setIsProfileSaving(false);
+    }
   };
 
   // Helper to render SVG icons for the horizontal recommendation cards
@@ -736,7 +1077,11 @@ export default function DashboardPage() {
                           {msg.role === "user" ? initials : "AI"}
                         </div>
                         <div className={styles.messageBubble}>
-                          <p className={styles.userText}>{msg.content}</p>
+                          {msg.role === "user" ? (
+                            <p className={styles.userText}>{msg.content}</p>
+                          ) : (
+                            renderFormattedMessage(msg.content)
+                          )}
                         </div>
                       </div>
                     ))}
@@ -806,53 +1151,156 @@ export default function DashboardPage() {
         )}
 
         {activeTab === "profile" && (
-          <div className={styles.mockScreenContainer}>
-            <h2 className={styles.mockHeading}>Profile Settings</h2>
-            <p className={styles.mockHeadingSub}>intellect layers configuration</p>
-            <p className={styles.mockDescText}>
-              These parameters determine the tone, complexity, vocabulary, and direction of the generated roadmaps.
-            </p>
+          <div className={styles.profilePanel}>
+            <header className={styles.profilePanelHeader}>
+              <div>
+                <p className={styles.mockHeadingSub}>personalization memory</p>
+                <h2 className={styles.mockHeading}>Profile Settings</h2>
+              </div>
+              <span className={styles.profileSyncBadge}>
+                {isProfileLoading ? "loading" : "rag context active"}
+              </span>
+            </header>
 
-            <div className={styles.profileEditGrid}>
-              <div className={styles.profileEditRow}>
-                <span className={styles.profileFieldLabel}>Name</span>
-                <span className={styles.profileFieldValue}>{displayName}</span>
+            <div className={styles.profileContextStrip}>
+              <div>
+                <span className={styles.profileFieldLabel}>Signed in as</span>
+                <strong>{displayName}</strong>
               </div>
-              <div className={styles.profileEditRow}>
-                <span className={styles.profileFieldLabel}>Current Role</span>
-                <span className={styles.profileFieldValue}>Product Designer</span>
-              </div>
-              <div className={styles.profileEditRow}>
-                <span className={styles.profileFieldLabel}>Target Goal</span>
-                <span className={styles.profileFieldValue}>Become a Senior Product Designer & Lead Systems Thinker</span>
-              </div>
-              <div className={styles.profileEditRow}>
-                <span className={styles.profileFieldLabel}>Interests</span>
-                <span className={styles.profileFieldValue}>AI, Design Systems, Technical Writing</span>
-              </div>
-              <div className={styles.profileEditRow}>
-                <span className={styles.profileFieldLabel}>Calibrated Tone</span>
-                <span className={styles.profileFieldValue}>Direct, Mentoring, Academic</span>
-              </div>
-              <div className={styles.profileEditRow}>
-                <span className={styles.profileFieldLabel}>Preferred Language</span>
-                <span className={styles.profileFieldValue}>English / US</span>
+              <div>
+                <span className={styles.profileFieldLabel}>AI behavior</span>
+                <strong>Personalized from profile + retrieved memories</strong>
               </div>
             </div>
 
+            <div className={styles.profileFormGrid}>
+              <label className={styles.profileField}>
+                <span className={styles.profileFieldLabel}>Current role</span>
+                <select
+                  value={profileForm.profession}
+                  onChange={(event) => updateProfileField("profession", event.target.value)}
+                  className={styles.profileSelect}
+                >
+                  {visibleRoleOptions.map((role) => (
+                    <option key={role} value={role}>
+                      {role}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className={styles.profileField}>
+                <span className={styles.profileFieldLabel}>Learning level</span>
+                <select
+                  value={profileForm.learningLevel}
+                  onChange={(event) => updateProfileField("learningLevel", event.target.value)}
+                  className={styles.profileSelect}
+                >
+                  {learningLevelOptions.map((level) => (
+                    <option key={level} value={level}>
+                      {level}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className={styles.profileField}>
+                <span className={styles.profileFieldLabel}>Interests</span>
+                <input
+                  value={profileForm.interests}
+                  onChange={(event) => updateProfileField("interests", event.target.value)}
+                  className={styles.profileInput}
+                  placeholder="AI, React, Design Systems"
+                />
+              </label>
+
+              <label className={styles.profileField}>
+                <span className={styles.profileFieldLabel}>Preferred language</span>
+                <select
+                  value={profileForm.preferredLanguage}
+                  onChange={(event) => updateProfileField("preferredLanguage", event.target.value)}
+                  className={styles.profileSelect}
+                >
+                  <option value="English">English</option>
+                  <option value="Hindi" disabled>
+                    Hindi - coming soon
+                  </option>
+                </select>
+              </label>
+
+              <label className={`${styles.profileField} ${styles.profileFieldWide}`}>
+                <span className={styles.profileFieldLabel}>Goals</span>
+                <textarea
+                  value={profileForm.goals}
+                  onChange={(event) => updateProfileField("goals", event.target.value)}
+                  className={styles.profileTextarea}
+                  rows={3}
+                  placeholder="Become a senior frontend engineer, build AI products..."
+                />
+              </label>
+
+              <label className={`${styles.profileField} ${styles.profileFieldWide}`}>
+                <span className={styles.profileFieldLabel}>Calibrated tone</span>
+                <select
+                  value={profileForm.tone}
+                  onChange={(event) => updateProfileField("tone", event.target.value)}
+                  className={styles.profileSelect}
+                >
+                  {visibleToneOptions.map((tone) => (
+                    <option key={tone} value={tone}>
+                      {tone}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className={`${styles.profileField} ${styles.profileFieldWide}`}>
+                <span className={styles.profileFieldLabel}>Answer style</span>
+                <select
+                  value={profileForm.answerStyle}
+                  onChange={(event) => updateProfileField("answerStyle", event.target.value)}
+                  className={styles.profileSelect}
+                >
+                  {visibleAnswerStyleOptions.map((answerStyle) => (
+                    <option key={answerStyle} value={answerStyle}>
+                      {answerStyle}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className={`${styles.profileField} ${styles.profileFieldWide}`}>
+                <span className={styles.profileFieldLabel}>Constraints</span>
+                <textarea
+                  value={profileForm.constraints}
+                  onChange={(event) => updateProfileField("constraints", event.target.value)}
+                  className={styles.profileTextarea}
+                  rows={3}
+                  placeholder="Avoid vague advice, keep it fast, focus on practical output..."
+                />
+              </label>
+            </div>
+
+            {(profileStatus || profileError) && (
+              <p className={profileError ? styles.profileError : styles.profileStatus}>
+                {profileError || profileStatus}
+              </p>
+            )}
+
             <div className={styles.mockActions}>
               <button
-                onClick={() => alert("Mock Action: Editing profile parameters.")}
+                onClick={handleProfileSave}
+                disabled={isProfileSaving || isProfileLoading}
                 className={styles.buttonPrimary}
                 style={{ width: "auto", display: "inline-flex" }}
               >
-                Configure Profile
+                {isProfileSaving ? "Saving..." : "Save Personalization"}
               </button>
               <button
-                onClick={() => setActiveTab("dashboard")}
+                onClick={() => setActiveTab("chat")}
                 className={styles.buttonSecondary}
               >
-                Back to Dashboard
+                Test in Chat
               </button>
             </div>
           </div>

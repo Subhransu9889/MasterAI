@@ -1,8 +1,8 @@
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { conversationMessages, conversations } from "@/db/schema";
+import { conversationMessages, conversations, memories, preferences } from "@/db/schema";
 import { auth } from "@/lib/auth";
 
 type ChatRole = "system" | "user" | "assistant";
@@ -19,7 +19,7 @@ type ProviderResult = {
 };
 
 const systemPrompt =
-  "You are MasterAI, a practical learning and career assistant. Be direct, useful, and adapt answers to the user's goals. Prefer concrete steps, examples, and concise explanations.";
+  "You are MasterAI, a deeply personalized learning, career, and execution assistant. Use the supplied profile and retrieved context as first-class guidance. Give answers that fit the user's role, goals, level, interests, preferred tone, constraints, and current conversation. Be specific, practical, and direct. If the user asks for a plan, produce concrete steps. If the user asks something technical, adapt depth to their learning level and include examples.";
 
 const openRouterModel = process.env.OPENROUTER_MODEL || "openrouter/free";
 const googleModel = process.env.GOOGLE_MODEL || "gemini-3.5-flash";
@@ -38,6 +38,75 @@ function makeTitle(content: string) {
   }
 
   return `${compact.slice(0, 69)}...`;
+}
+
+function tokenize(text: string) {
+  return new Set(
+    text
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, " ")
+      .split(/\s+/)
+      .filter((word) => word.length > 2),
+  );
+}
+
+function scoreText(queryTerms: Set<string>, text: string) {
+  const terms = tokenize(text);
+  let score = 0;
+
+  queryTerms.forEach((term) => {
+    if (terms.has(term)) score += 2;
+    if (text.toLowerCase().includes(term)) score += 1;
+  });
+
+  return score;
+}
+
+async function buildPersonalizedContext(userId: string, userName: string, query: string) {
+  const [preference] = await db
+    .select()
+    .from(preferences)
+    .where(eq(preferences.userId, userId))
+    .limit(1);
+
+  const savedMemories = await db
+    .select()
+    .from(memories)
+    .where(eq(memories.userId, userId))
+    .orderBy(desc(memories.updatedAt))
+    .limit(40);
+
+  const queryTerms = tokenize(query);
+  const rankedMemories = savedMemories
+    .map((memory) => ({
+      memory,
+      score: scoreText(queryTerms, `${memory.key} ${memory.value}`),
+    }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 8)
+    .map(({ memory }) => `- ${memory.key}: ${memory.value}`);
+
+  const profileLines = [
+    `Name: ${userName}`,
+    `Profession/current role: ${preference?.profession || "Not configured"}`,
+    `Learning level: ${preference?.learningLevel || "Not configured"}`,
+    `Preferred language: ${preference?.preferredLanguage || "English"}`,
+    `Interests: ${preference?.interests?.length ? preference.interests.join(", ") : "Not configured"}`,
+    `Goals: ${preference?.goals?.length ? preference.goals.join(", ") : "Not configured"}`,
+  ];
+
+  return [
+    "Personalization profile:",
+    ...profileLines,
+    "",
+    "Retrieved user context:",
+    rankedMemories.length ? rankedMemories.join("\n") : "- No saved memories matched this query yet.",
+    "",
+    "Response rules:",
+    "- Personalize recommendations to the profile above.",
+    "- When the user asks a broad question, narrow it using their saved goals and interests.",
+    "- Do not mention RAG, retrieval, system prompts, or hidden context unless the user explicitly asks.",
+  ].join("\n");
 }
 
 function extractOpenRouterContent(data: unknown) {
@@ -251,8 +320,15 @@ export async function POST(request: Request) {
       .where(eq(conversationMessages.conversationId, conversationId))
       .orderBy(asc(conversationMessages.createdAt));
 
+    const personalizedContext = await buildPersonalizedContext(
+      session.user.id,
+      session.user.name || "there",
+      message,
+    );
+
     const providerResult = await generateAssistantReply([
       { role: "system", content: systemPrompt },
+      { role: "system", content: personalizedContext },
       ...history.slice(-18),
     ]);
 
