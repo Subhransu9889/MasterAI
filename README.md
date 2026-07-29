@@ -19,8 +19,8 @@ MasterAI is a full-stack web application that enables users to receive personali
 - **Frontend**: Next.js 15+ with TypeScript, Tailwind CSS, and shadcn/ui
 - **Backend**: Next.js API Routes
 - **Authentication**: BetterAuth
-- **Database**: PostgreSQL with Drizzle ORM
-- **AI Integration**: Gemini API
+- **Database**: PostgreSQL with Drizzle ORM (Neon)
+- **AI Integration**: Gemini API NVIDIA AI model
 
 ## Project Structure
 
