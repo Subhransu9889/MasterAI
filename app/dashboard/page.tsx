@@ -21,6 +21,12 @@ type RecentConversation = {
   date: string;
 };
 
+type ChatMessage = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+};
+
 const defaultRecommendations: Recommendation[] = [
   {
     id: "rec-1",
@@ -85,6 +91,13 @@ const defaultConversations: RecentConversation[] = [
   },
 ];
 
+const loadingSteps = [
+  "Thinking...",
+  "Reading the conversation context...",
+  "Planning a useful answer...",
+  "Writing the response...",
+];
+
 export default function DashboardPage() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -95,18 +108,92 @@ export default function DashboardPage() {
 
   // Pure frontend Chat session states
   const [isChatActive, setIsChatActive] = useState(false);
-  const [messages, setMessages] = useState<Array<{ id: string; role: "user" | "assistant"; content: string }>>([]);
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState("");
+  const [isSending, setIsSending] = useState(false);
+  const [chatError, setChatError] = useState<string | null>(null);
+  const [activeProvider, setActiveProvider] = useState<string>("openrouter/free");
+  const [loadingStepIndex, setLoadingStepIndex] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages, isSending, chatError]);
 
-  const handleSendMessage = (text: string) => {
+  useEffect(() => {
+    if (!isSending) {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      setLoadingStepIndex((current) => (current + 1) % loadingSteps.length);
+    }, 1600);
+
+    return () => window.clearInterval(timer);
+  }, [isSending]);
+
+  const handleSendMessage = async (text: string) => {
     if (!text.trim()) return;
-    setMessages((prev) => [...prev, { id: `msg-${Date.now()}`, role: "user", content: text }]);
+
+    const userMessage: ChatMessage = {
+      id: `local-${Date.now()}`,
+      role: "user",
+      content: text.trim(),
+    };
+
+    setIsChatActive(true);
+    setMessages((prev) => [...prev, userMessage]);
     setInputValue("");
+    setIsSending(true);
+    setLoadingStepIndex(0);
+    setChatError(null);
+
+    try {
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          conversationId,
+          message: userMessage.content,
+        }),
+      });
+
+      const data = (await response.json()) as {
+        conversationId?: string;
+        provider?: string;
+        model?: string;
+        messages?: ChatMessage[];
+        error?: string;
+      };
+
+      if (!response.ok) {
+        throw new Error(data.error || "MasterAI could not complete that request.");
+      }
+
+      if (data.conversationId) {
+        setConversationId(data.conversationId);
+      }
+
+      if (data.provider && data.model) {
+        setActiveProvider(`${data.provider} / ${data.model}`);
+      }
+
+      const assistantMessage = data.messages?.find((message) => message.role === "assistant");
+      if (assistantMessage) {
+        setMessages((prev) => [...prev, assistantMessage]);
+      }
+    } catch (error) {
+      setChatError(
+        error instanceof Error
+          ? error.message
+          : "MasterAI could not complete that request.",
+      );
+    } finally {
+      setIsSending(false);
+    }
   };
 
   const session = authClient.useSession();
@@ -560,7 +647,9 @@ export default function DashboardPage() {
                 <button 
                   onClick={() => {
                     setIsChatActive(false);
+                    setConversationId(null);
                     setMessages([]);
+                    setChatError(null);
                   }} 
                   className={styles.chatNewButton}
                 >
@@ -651,6 +740,29 @@ export default function DashboardPage() {
                         </div>
                       </div>
                     ))}
+                    {isSending && (
+                      <div className={`${styles.messageRow} ${styles.messageRowAssistant}`}>
+                        <div className={styles.messageAvatar}>AI</div>
+                        <div className={`${styles.messageBubble} ${styles.thinkingBubble}`}>
+                          <span className={styles.thinkingLabel}>
+                            {loadingSteps[loadingStepIndex]}
+                          </span>
+                          <span className={styles.thinkingDots} aria-hidden="true">
+                            <span />
+                            <span />
+                            <span />
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                    {chatError && !isSending && (
+                      <div className={`${styles.messageRow} ${styles.messageRowAssistant}`}>
+                        <div className={styles.messageAvatar}>AI</div>
+                        <div className={`${styles.messageBubble} ${styles.errorBubble}`}>
+                          <p className={styles.userText}>{chatError}</p>
+                        </div>
+                      </div>
+                    )}
                     <div ref={messagesEndRef} />
                   </div>
                 )}
@@ -669,12 +781,13 @@ export default function DashboardPage() {
                     type="text"
                     value={inputValue}
                     onChange={(e) => setInputValue(e.target.value)}
+                    disabled={isSending}
                     placeholder="Ask MasterAI a question..."
                     className={styles.chatInput}
                   />
                   <button
                     type="submit"
-                    disabled={!inputValue.trim()}
+                    disabled={!inputValue.trim() || isSending}
                     className={styles.chatSendButton}
                     aria-label="Send message"
                   >
@@ -685,7 +798,7 @@ export default function DashboardPage() {
                   </button>
                 </form>
                 <p className={styles.chatFootnote}>
-                  MasterAI 1.0 calibrated to {firstName.toLowerCase()}'s trajectory. Pure frontend client session.
+                  MasterAI calibrated to {firstName.toLowerCase()}&apos;s trajectory. Provider: {activeProvider}.
                 </p>
               </div>
             </div>
