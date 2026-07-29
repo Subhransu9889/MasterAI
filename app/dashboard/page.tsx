@@ -13,6 +13,7 @@ type Recommendation = {
   title: string;
   status: string;
   complexity: string;
+  prompt?: string;
 };
 
 type RecentConversation = {
@@ -20,6 +21,20 @@ type RecentConversation = {
   index: string;
   title: string;
   date: string;
+};
+
+type ApiConversation = {
+  id: string;
+  title: string;
+  updatedAt?: string | Date | null;
+  createdAt?: string | Date | null;
+};
+
+type GeneratedRoadmap = {
+  id: string;
+  title: string;
+  focus: string;
+  createdAt: string;
 };
 
 type ChatMessage = {
@@ -119,30 +134,38 @@ const defaultRecommendations: Recommendation[] = [
   {
     id: "rec-1",
     tag: "roadmap",
-    title: "Learn React Hooks",
-    status: "In progress / 72% done",
+    title: "Create a personalized AI product roadmap",
+    status: "Roadmap tool / creates a live chat plan",
     complexity: "medium",
+    prompt:
+      "Create a personalized 30-day AI product roadmap for my current profile. Include weekly milestones, daily practice blocks, projects, checkpoints, and what to avoid.",
   },
   {
     id: "rec-2",
-    tag: "project",
-    title: "Build a Weather App",
-    status: "Recommended / 2 days duration",
-    complexity: "simple",
+    tag: "roadmap",
+    title: "Frontend interview mastery roadmap",
+    status: "Roadmap tool / 21-day sprint",
+    complexity: "medium",
+    prompt:
+      "Create a 21-day frontend interview roadmap for my current profile. Cover JavaScript, TypeScript, React, Next.js, system design, projects, and mock interview checkpoints.",
   },
   {
     id: "rec-3",
-    tag: "reading",
-    title: "Read Clean Code",
-    status: "Recommended / Theoretical study",
-    complexity: "theoretical",
+    tag: "roadmap",
+    title: "Design systems growth roadmap",
+    status: "Roadmap tool / senior skill path",
+    complexity: "advanced",
+    prompt:
+      "Create a design systems growth roadmap for becoming senior-level. Include token architecture, components, documentation, governance, portfolio proof, and weekly outputs.",
   },
   {
     id: "rec-4",
-    tag: "practice",
-    title: "Practice Arrays",
-    status: "Next up / Tomorrow priority",
+    tag: "project",
+    title: "Generate a portfolio project sequence",
+    status: "Planning tool / project ladder",
     complexity: "simple",
+    prompt:
+      "Create a portfolio project sequence based on my profile. Give me 5 projects from small to advanced, with scope, features, success criteria, and estimated time.",
   },
 ];
 
@@ -185,6 +208,35 @@ const loadingSteps = [
   "Planning a useful answer...",
   "Writing the response...",
 ];
+
+function formatConversationDate(value?: string | Date | null) {
+  if (!value) return "recently";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "recently";
+
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffDays = Math.floor(diffMs / 86_400_000);
+
+  if (diffDays <= 0) return "today";
+  if (diffDays === 1) return "yesterday";
+  if (diffDays < 7) return `${diffDays} days ago`;
+
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function mapConversationHistory(conversations: ApiConversation[]) {
+  return conversations.slice(0, 5).map((conversation, index) => ({
+    id: conversation.id,
+    index: String(index + 1).padStart(2, "0"),
+    title: conversation.title || "New conversation",
+    date: formatConversationDate(conversation.updatedAt || conversation.createdAt),
+  }));
+}
 
 function profileToForm(profile: PersonalizationProfile): ProfileForm {
   return {
@@ -342,7 +394,10 @@ export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [recs] = useState<Recommendation[]>(defaultRecommendations);
-  const [chats] = useState<RecentConversation[]>(defaultConversations);
+  const [chats, setChats] = useState<RecentConversation[]>([]);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [generatedRoadmaps, setGeneratedRoadmaps] = useState<GeneratedRoadmap[]>([]);
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
   // Pure frontend Chat session states
@@ -360,6 +415,38 @@ export default function DashboardPage() {
   const [profileStatus, setProfileStatus] = useState<string | null>(null);
   const [profileError, setProfileError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const localIdRef = useRef(0);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem("dashboardSidebarCollapsed") === "true";
+  });
+
+  const refreshConversationHistory = async () => {
+    setIsHistoryLoading(true);
+    setHistoryError(null);
+
+    try {
+      const response = await fetch("/api/conversations");
+      const data = (await response.json()) as ApiConversation[] | { error?: string };
+
+      if (!response.ok || !Array.isArray(data)) {
+        throw new Error(
+          !Array.isArray(data) && data.error
+            ? data.error
+            : "Could not load conversation history.",
+        );
+      }
+
+      setChats(mapConversationHistory(data));
+    } catch (error) {
+      setHistoryError(
+        error instanceof Error ? error.message : "Could not load conversation history.",
+      );
+      setChats(defaultConversations);
+    } finally {
+      setIsHistoryLoading(false);
+    }
+  };
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -381,7 +468,7 @@ export default function DashboardPage() {
     if (!text.trim()) return;
 
     const userMessage: ChatMessage = {
-      id: `local-${Date.now()}`,
+      id: `local-${(localIdRef.current += 1)}`,
       role: "user",
       content: text.trim(),
     };
@@ -429,6 +516,8 @@ export default function DashboardPage() {
       if (assistantMessage) {
         setMessages((prev) => [...prev, assistantMessage]);
       }
+
+      refreshConversationHistory();
     } catch (error) {
       setChatError(
         error instanceof Error
@@ -461,11 +550,23 @@ export default function DashboardPage() {
     profileForm.answerStyle,
   );
 
+  const latestRoadmaps = generatedRoadmaps.slice(0, 3);
+
   useEffect(() => {
     if (!session.isPending && !user) {
       router.replace("/auth?mode=signin");
     }
   }, [router, session.isPending, user]);
+
+  useEffect(() => {
+    if (user) {
+      const timeoutId = window.setTimeout(() => {
+        refreshConversationHistory();
+      }, 0);
+
+      return () => window.clearTimeout(timeoutId);
+    }
+  }, [user]);
 
   useEffect(() => {
     if (!user) return;
@@ -523,8 +624,34 @@ export default function DashboardPage() {
     router.push("/");
   };
 
-  const handleRecAction = (title: string) => {
-    alert(`Mock Action: Starting activity for "${title}"`);
+  const toggleSidebarCollapsed = () => {
+    setSidebarCollapsed((current) => {
+      const next = !current;
+      window.localStorage.setItem("dashboardSidebarCollapsed", String(next));
+      return next;
+    });
+  };
+
+  const handleRecAction = (rec: Recommendation) => {
+    const prompt =
+      rec.prompt ||
+      `Create a practical roadmap for ${rec.title}. Include milestones, tasks, resources, and checkpoints.`;
+
+    setGeneratedRoadmaps((current) => [
+      {
+        id: `roadmap-${(localIdRef.current += 1)}`,
+        title: rec.title,
+        focus: rec.complexity,
+        createdAt: "just now",
+      },
+      ...current,
+    ]);
+    setActiveTab("chat");
+    setIsChatActive(true);
+    setConversationId(null);
+    setMessages([]);
+    setChatError(null);
+    handleSendMessage(prompt);
   };
 
   const updateProfileField = (field: keyof ProfileForm, value: string) => {
@@ -635,16 +762,44 @@ export default function DashboardPage() {
       )}
 
       {/* Left Sidebar Navigation */}
-      <aside className={`${styles.sidebar} ${sidebarOpen ? styles.sidebarActive : ""}`}>
-        <div className={styles.sidebarBranding}>
+      <aside
+        className={`${styles.sidebar} ${sidebarOpen ? styles.sidebarActive : ""} ${
+          sidebarCollapsed ? styles.sidebarCollapsed : ""
+        }`}
+      >
+        <div className={styles.sidebarTopRow}>
           <Link href="/" className={styles.brand} aria-label="MasterAI home">
             <span className={styles.brandMark} aria-hidden="true">
               <span />
             </span>
-            <span>
+            <span className={styles.brandText}>
               master<span className={styles.brandAccent}>ai</span>
             </span>
           </Link>
+          <button
+            type="button"
+            className={styles.sidebarToggleButton}
+            onClick={toggleSidebarCollapsed}
+            aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2">
+              {sidebarCollapsed ? (
+                <>
+                  <rect x="3" y="3" width="18" height="18" rx="2" />
+                  <path d="M10 8l4 4-4 4" />
+                </>
+              ) : (
+                <>
+                  <rect x="3" y="3" width="18" height="18" rx="2" />
+                  <path d="M14 8l-4 4 4 4" />
+                </>
+              )}
+            </svg>
+          </button>
+        </div>
+
+        <div className={styles.sidebarBranding}>
           <span className={styles.brandSubline}>personal intelligence</span>
         </div>
 
@@ -654,7 +809,7 @@ export default function DashboardPage() {
               <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
               <polyline points="9 22 9 12 15 12 15 22" />
             </svg>
-            back to home
+            <span className={styles.navLabel}>back to home</span>
           </Link>
           <button
             type="button"
@@ -670,7 +825,7 @@ export default function DashboardPage() {
               <rect x="14" y="14" width="7" height="7" />
               <rect x="3" y="14" width="7" height="7" />
             </svg>
-            dashboard
+            <span className={styles.navLabel}>dashboard</span>
           </button>
           <button
             type="button"
@@ -683,7 +838,7 @@ export default function DashboardPage() {
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
             </svg>
-            chat
+            <span className={styles.navLabel}>chat</span>
           </button>
           <button
             type="button"
@@ -697,13 +852,13 @@ export default function DashboardPage() {
               <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
               <circle cx="12" cy="7" r="4" />
             </svg>
-            profile settings
+            <span className={styles.navLabel}>profile settings</span>
           </button>
         </nav>
       </aside>
 
       {/* Main scrolling area (Right) */}
-      <section className={styles.mainContent}>
+      <section className={`${styles.mainContent} ${isChatActive ? styles.mainContentChatActive : ""}`}>
         {/* Mobile Header Bar */}
         <header className={styles.mobileHeader}>
           <button
@@ -803,7 +958,10 @@ export default function DashboardPage() {
           <div className={styles.topActionsArea}>
             <div className={styles.quickButtons}>
               <button
-                onClick={() => setActiveTab("chat")}
+                onClick={() => {
+                  setActiveTab("chat");
+                  setIsChatActive(true);
+                }}
                 className={styles.buttonOutline}
               >
                 + new chat
@@ -892,18 +1050,32 @@ export default function DashboardPage() {
             <div>
               <header className={styles.sectionHeader}>
                 <div>
-                  <h2 className={styles.sectionTitle}>Curated Roadmaps</h2>
-                  <p className={styles.sectionTitleSub}>Personalized daily & default system trajectories</p>
+                  <h2 className={styles.sectionTitle}>Roadmap Studio</h2>
+                  <p className={styles.sectionTitleSub}>Click any roadmap tool to generate a live plan in chat</p>
                 </div>
-                <span className={styles.sectionMeta}>4 target moves</span>
+                <span className={styles.sectionMeta}>{recs.length} tools</span>
               </header>
+
+              <div className={styles.roadmapToolShell}>
+                <div className={styles.roadmapToolIntro}>
+                  <span className={styles.roadmapToolBadge}>roadmap generator</span>
+                  <h3 className={styles.roadmapToolTitle}>Turn a goal into a step-by-step execution path.</h3>
+                  <p className={styles.roadmapToolCopy}>
+                    Each card starts a new MasterAI session with your profile context, milestones, tasks, projects, checkpoints, and next actions.
+                  </p>
+                </div>
+                <div className={styles.roadmapToolStats}>
+                  <span>{generatedRoadmaps.length}</span>
+                  <small>created this session</small>
+                </div>
+              </div>
 
               <div className={styles.recsGrid}>
                 {recs.map((rec) => (
                   <article
                     key={rec.id}
                     className={styles.recCard}
-                    onClick={() => handleRecAction(rec.title)}
+                    onClick={() => handleRecAction(rec)}
                   >
                     <div className={`${styles.recIconBox} ${getIconClass(rec.tag)}`}>
                       {renderCardIcon(rec.tag)}
@@ -912,9 +1084,24 @@ export default function DashboardPage() {
                       <h3 className={styles.recTitle}>{rec.title}</h3>
                       <span className={styles.recStatus}>{rec.status}</span>
                     </div>
+                    <span className={styles.recAction}>Create</span>
                   </article>
                 ))}
               </div>
+
+              {latestRoadmaps.length > 0 && (
+                <div className={styles.generatedRoadmapList}>
+                  {latestRoadmaps.map((roadmap) => (
+                    <div key={roadmap.id} className={styles.generatedRoadmapItem}>
+                      <span className={styles.generatedRoadmapDot} />
+                      <div>
+                        <strong>{roadmap.title}</strong>
+                        <span>{roadmap.focus} roadmap / {roadmap.createdAt}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Recent conversation tables */}
@@ -922,32 +1109,45 @@ export default function DashboardPage() {
               <header className={styles.sectionHeader}>
                 <div>
                   <h2 className={styles.sectionTitle}>Recent Conversations</h2>
-                  <p className={styles.sectionTitleSub}>Last 5 chat history entries</p>
+                  <p className={styles.sectionTitleSub}>Actual saved chat history from your account</p>
                 </div>
-                <span className={styles.sectionMeta}>historical calibration</span>
+                <span className={styles.sectionMeta}>
+                  {isHistoryLoading ? "syncing" : `${chats.length} loaded`}
+                </span>
               </header>
 
               <div className={styles.convList}>
-                {chats.map((chat) => (
-                  <a
-                    key={chat.id}
-                    href="#chat"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      setActiveTab("chat");
-                    }}
-                    className={styles.convItem}
-                  >
-                    <span className={styles.convIndex}>{chat.index}</span>
-                    <strong className={styles.convItemTitle}>{chat.title}</strong>
-                    <div className={styles.convItemMeta}>
-                      <span className={styles.convDate}>{chat.date}</span>
-                      <span className={styles.convArrow} aria-hidden="true">
-                        →
-                      </span>
-                    </div>
-                  </a>
-                ))}
+                {historyError && (
+                  <div className={styles.convNotice}>{historyError}</div>
+                )}
+                {isHistoryLoading && chats.length === 0 ? (
+                  <div className={styles.convNotice}>Loading your saved conversations...</div>
+                ) : chats.length > 0 ? (
+                  chats.map((chat) => (
+                    <a
+                      key={chat.id}
+                      href="#chat"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setActiveTab("chat");
+                        setIsChatActive(true);
+                        setConversationId(chat.id);
+                      }}
+                      className={styles.convItem}
+                    >
+                      <span className={styles.convIndex}>{chat.index}</span>
+                      <strong className={styles.convItemTitle}>{chat.title}</strong>
+                      <div className={styles.convItemMeta}>
+                        <span className={styles.convDate}>{chat.date}</span>
+                        <span className={styles.convArrow} aria-hidden="true">
+                          →
+                        </span>
+                      </div>
+                    </a>
+                  ))
+                ) : (
+                  <div className={styles.convNotice}>No saved conversations yet. Start a chat to create history.</div>
+                )}
               </div>
             </div>
           </>
@@ -978,12 +1178,32 @@ export default function DashboardPage() {
               </div>
             </div>
           ) : (
-            <div className={styles.chatWorkspaceFullscreen}>
+            <div className={styles.chatWorkspace}>
               {/* Minimalist Top Bar for Chat tab */}
               <div className={styles.chatTopBar}>
                 <div className={styles.chatInfo}>
                   <span className={styles.chatInfoBadge}>assistant / active</span>
-                  <span className={styles.chatTitleLabel}>new session</span>
+                  <span className={styles.chatTitleLabel}>
+                    {conversationId ? "saved conversation" : "new session"}
+                  </span>
+                </div>
+                <div className={styles.chatToolbar}>
+                  <button
+                    type="button"
+                    className={styles.chatToolButton}
+                    onClick={() => handleSendMessage("Create a roadmap from my latest goal and profile context.")}
+                    disabled={isSending}
+                  >
+                    Roadmap
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.chatToolButton}
+                    onClick={() => handleSendMessage("Turn this into a checklist with priorities and time estimates.")}
+                    disabled={isSending}
+                  >
+                    Checklist
+                  </button>
                 </div>
                 <button 
                   onClick={() => {
