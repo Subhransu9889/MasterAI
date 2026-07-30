@@ -19,13 +19,13 @@ type ProviderResult = {
 };
 
 const systemPrompt =
-  "You are MasterAI, a deeply personalized learning, career, and execution assistant. Use the supplied profile and retrieved context as first-class guidance. Give answers that fit the user's role, goals, level, interests, preferred tone, constraints, and current conversation. Be specific, practical, and direct. If the user asks for a plan, produce concrete steps. If the user asks something technical, adapt depth to their learning level and include examples.";
+  "You are MasterAI, a deeply personalized learning, career, and execution assistant. Use the supplied profile and retrieved context as first-class guidance. Give answers that fit the user's role, goals, level, interests, preferred tone, constraints, and current conversation. Be specific, practical, and direct. If the user asks for a plan, produce concrete steps. If the user asks something technical, adapt depth to their learning level and include examples. Format responses as clean, human-readable markdown with short paragraphs, headings, bullet points, numbered lists, and emphasis where helpful. Avoid long wall-of-text replies.";
 
 const openRouterModel = process.env.OPENROUTER_MODEL || "openrouter/free";
 const googleModel = process.env.GOOGLE_MODEL || "gemini-3.5-flash";
 
 const genericChatError =
-  "MasterAI could not complete that request. Check the API keys or try again in a moment.";
+  "MasterAI could not complete that request. Try again in a moment.";
 
 function getGoogleApiKey() {
   return process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;

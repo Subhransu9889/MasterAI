@@ -256,7 +256,11 @@ function splitList(value: string) {
 }
 
 function renderInlineText(text: string) {
-  return text.split(/(`[^`]+`|\*\*[^*]+\*\*)/g).map((part, index) => {
+  const parts = text.split(/(`[^`]+`|\*\*[^*]+\*\*|__[^_]+__|\*[^*]+\*|\[([^\]]+)\]\(([^)]+)\))/g);
+
+  return parts.map((part, index) => {
+    if (!part) return null;
+
     if (part.startsWith("`") && part.endsWith("`")) {
       return (
         <code key={`${part}-${index}`} className={styles.assistantInlineCode}>
@@ -267,6 +271,29 @@ function renderInlineText(text: string) {
 
     if (part.startsWith("**") && part.endsWith("**")) {
       return <strong key={`${part}-${index}`}>{part.slice(2, -2)}</strong>;
+    }
+
+    if (part.startsWith("__") && part.endsWith("__")) {
+      return <strong key={`${part}-${index}`}>{part.slice(2, -2)}</strong>;
+    }
+
+    if (part.startsWith("*") && part.endsWith("*") && part.length > 1) {
+      return <em key={`${part}-${index}`}>{part.slice(1, -1)}</em>;
+    }
+
+    const linkMatch = /^\[([^\]]+)\]\(([^)]+)\)$/.exec(part);
+    if (linkMatch) {
+      return (
+        <a
+          key={`${part}-${index}`}
+          href={linkMatch[2]}
+          target="_blank"
+          rel="noreferrer"
+          className={styles.assistantLink}
+        >
+          {linkMatch[1]}
+        </a>
+      );
     }
 
     return <span key={`${part}-${index}`}>{part}</span>;
@@ -380,6 +407,51 @@ function renderFormattedMessage(content: string) {
       continue;
     }
 
+    const tableRows: string[] = [];
+    if (trimmed.includes("|") && lines[index + 1]?.trim().includes("|")) {
+      while (index < lines.length && lines[index].trim().includes("|")) {
+        tableRows.push(lines[index].trim());
+        index += 1;
+      }
+
+      if (tableRows.length >= 2) {
+        const separator = tableRows[1].replace(/\|/g, "").trim();
+        if (/^[:\-\s]+$/.test(separator)) {
+          const rows = tableRows.map((row) => row.split("|").slice(1, -1).map((cell) => cell.trim()));
+          const header = rows[0];
+          const bodyRows = rows.slice(2);
+
+          blocks.push(
+            <div key={`table-${blocks.length}`} className={styles.assistantTableWrap}>
+              <table className={styles.assistantTable}>
+                <thead>
+                  <tr>
+                    {header.map((cell, columnIndex) => (
+                      <th key={`${cell}-${columnIndex}`} className={styles.assistantTableCell}>
+                        {renderInlineText(cell)}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {bodyRows.map((row, rowIndex) => (
+                    <tr key={`row-${rowIndex}`}>
+                      {row.map((cell, columnIndex) => (
+                        <td key={`${cell}-${columnIndex}`} className={styles.assistantTableCell}>
+                          {renderInlineText(cell)}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>,
+          );
+          continue;
+        }
+      }
+    }
+
     paragraph.push(trimmed);
     index += 1;
   }
@@ -407,6 +479,8 @@ export default function DashboardPage() {
   const [inputValue, setInputValue] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+  const [regeneratingMessageId, setRegeneratingMessageId] = useState<string | null>(null);
   const [activeProvider, setActiveProvider] = useState<string>("openrouter/free");
   const [loadingStepIndex, setLoadingStepIndex] = useState(0);
   const [profileForm, setProfileForm] = useState<ProfileForm>(() => profileToForm(defaultProfile));
@@ -464,17 +538,23 @@ export default function DashboardPage() {
     return () => window.clearInterval(timer);
   }, [isSending]);
 
-  const handleSendMessage = async (text: string) => {
-    if (!text.trim()) return;
+  const handleSendMessage = async (
+    text: string,
+    options?: { skipLocalUserMessage?: boolean },
+  ) => {
+    const trimmedText = text.trim();
+    if (!trimmedText) return;
 
     const userMessage: ChatMessage = {
       id: `local-${(localIdRef.current += 1)}`,
       role: "user",
-      content: text.trim(),
+      content: trimmedText,
     };
 
     setIsChatActive(true);
-    setMessages((prev) => [...prev, userMessage]);
+    if (!options?.skipLocalUserMessage) {
+      setMessages((prev) => [...prev, userMessage]);
+    }
     setInputValue("");
     setIsSending(true);
     setLoadingStepIndex(0);
@@ -488,7 +568,7 @@ export default function DashboardPage() {
         },
         body: JSON.stringify({
           conversationId,
-          message: userMessage.content,
+          message: trimmedText,
         }),
       });
 
@@ -526,6 +606,85 @@ export default function DashboardPage() {
       );
     } finally {
       setIsSending(false);
+    }
+  };
+
+  const handleCopyMessage = async (content: string, messageId: string) => {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopiedMessageId(messageId);
+      window.setTimeout(() => {
+        setCopiedMessageId((current) => (current === messageId ? null : current));
+      }, 1600);
+    } catch {
+      setCopiedMessageId(null);
+    }
+  };
+
+  const handleRegenerateMessage = async (messageId: string) => {
+    const currentIndex = messages.findIndex((message) => message.id === messageId);
+    if (currentIndex === -1 || isSending) return;
+
+    const previousUserMessage = [...messages.slice(0, currentIndex)]
+      .reverse()
+      .find((message) => message.role === "user");
+
+    const prompt = previousUserMessage?.content?.trim();
+    if (!prompt) return;
+
+    setMessages((prev) => prev.filter((message) => message.id !== messageId));
+    setIsSending(true);
+    setLoadingStepIndex(0);
+    setChatError(null);
+    setRegeneratingMessageId(messageId);
+
+    try {
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          conversationId,
+          message: prompt,
+        }),
+      });
+
+      const data = (await response.json()) as {
+        conversationId?: string;
+        provider?: string;
+        model?: string;
+        messages?: ChatMessage[];
+        error?: string;
+      };
+
+      if (!response.ok) {
+        throw new Error(data.error || "MasterAI could not complete that request.");
+      }
+
+      if (data.conversationId) {
+        setConversationId(data.conversationId);
+      }
+
+      if (data.provider && data.model) {
+        setActiveProvider(`${data.provider} / ${data.model}`);
+      }
+
+      const assistantMessage = data.messages?.find((message) => message.role === "assistant");
+      if (assistantMessage) {
+        setMessages((prev) => [...prev, assistantMessage]);
+      }
+
+      refreshConversationHistory();
+    } catch (error) {
+      setChatError(
+        error instanceof Error
+          ? error.message
+          : "MasterAI could not complete that request.",
+      );
+    } finally {
+      setIsSending(false);
+      setRegeneratingMessageId(null);
     }
   };
 
@@ -1300,7 +1459,39 @@ export default function DashboardPage() {
                           {msg.role === "user" ? (
                             <p className={styles.userText}>{msg.content}</p>
                           ) : (
-                            renderFormattedMessage(msg.content)
+                            <div className={styles.assistantMessageShell}>
+                              {renderFormattedMessage(msg.content)}
+                              <div className={styles.assistantMessageActions}>
+                                <button
+                                  type="button"
+                                  className={styles.assistantActionButton}
+                                  onClick={() => handleCopyMessage(msg.content, msg.id)}
+                                  disabled={copiedMessageId === msg.id}
+                                  aria-label="Copy response"
+                                  title="Copy response"
+                                >
+                                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <rect x="9" y="9" width="11" height="11" rx="2" />
+                                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                                  </svg>
+                                  <span>{copiedMessageId === msg.id ? "Copied" : "Copy"}</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  className={styles.assistantActionButton}
+                                  onClick={() => handleRegenerateMessage(msg.id)}
+                                  disabled={regeneratingMessageId === msg.id || isSending}
+                                  aria-label="Regenerate response"
+                                  title="Regenerate response"
+                                >
+                                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+                                    <path d="M21 3v6h-6" />
+                                  </svg>
+                                  <span>{regeneratingMessageId === msg.id ? "Regenerating" : "Regenerate"}</span>
+                                </button>
+                              </div>
+                            </div>
                           )}
                         </div>
                       </div>

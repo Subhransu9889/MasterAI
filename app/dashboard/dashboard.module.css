@@ -1692,6 +1692,12 @@
   overflow-wrap: anywhere;
 }
 
+.assistantMessageShell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
 .assistantText {
   display: flex;
   flex-direction: column;
@@ -1703,6 +1709,79 @@
 .assistantText strong {
   color: var(--paper);
   font-weight: 700;
+}
+
+.assistantMessageActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin-top: 0.2rem;
+}
+
+.assistantActionButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(243, 240, 234, 0.75);
+  border-radius: 999px;
+  padding: 0.3rem 0.65rem;
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.62rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 180ms ease;
+}
+
+.assistantActionButton span {
+  line-height: 1;
+}
+
+.assistantActionButton:hover:not(:disabled) {
+  border-color: rgba(221, 248, 93, 0.35);
+  background: rgba(221, 248, 93, 0.08);
+  color: var(--lime);
+}
+
+.assistantActionButton:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+.assistantLink {
+  color: var(--lime);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.assistantTableWrap {
+  overflow-x: auto;
+  margin: 0.2rem 0;
+}
+
+.assistantTable {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 280px;
+  font-size: 0.82rem;
+}
+
+.assistantTable th,
+.assistantTable td {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 0.55rem 0.65rem;
+  text-align: left;
+}
+
+.assistantTable th {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--paper);
+}
+
+.assistantTable td {
+  color: rgba(243, 240, 234, 0.8);
 }
 
 .assistantParagraph {
